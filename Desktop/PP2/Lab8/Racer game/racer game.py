@@ -12,7 +12,7 @@ RED = (255, 0, 0)
 GREEN = (0, 255, 0)
 
 #SIZE
-WIDTH = 400
+WIDTH = 600
 HEIGHT = 600
 
 #IMAGES
@@ -172,6 +172,8 @@ while restart:
         coins_text = font.render(f"COINS", True, BLACK)
         score = font.render(f"{SCORE}", True, BLACK)
         coins_cnt = font.render(f"{COINS}", False, False)
+        pygame.draw.rect(screen, WHITE, (450, 10, 100, 180))  # White box
+        pygame.draw.rect(screen, BLACK, (450, 10, 100, 180), 3)
 
         screen.blit(font.render(f"SCORE", True, BLACK), (470, 10))
         screen.blit(coins_text, (470, 130))
