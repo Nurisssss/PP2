@@ -10,11 +10,7 @@ def connect():
             password="password",
             port="5432"
         )
-        cur = conn.cursor()
-        cur.execute('SELECT version()')
-        db_version = cur.fetchone()
-        print("[INFO] Connected:", db_version)
-        cur.close()
+        print("[INFO] Connected to database")
         return conn
     except (Exception, psycopg2.DatabaseError) as error:
         print("[ERROR] Connection failed:", error)
@@ -24,54 +20,59 @@ def connect():
 def createTable(cursor):
     query = """
         CREATE TABLE IF NOT EXISTS phonebook2 (
-            id SERIAL,
+            id SERIAL PRIMARY KEY,
             phone VARCHAR(11),
             name VARCHAR(255) UNIQUE
-        )
+        );
     """
     cursor.execute(query)
 
 
-def insertData(cursor, name, phone):
-    query = """
-        INSERT INTO phonebook2 (name, phone)
-        VALUES (%s, %s)
-        ON CONFLICT (name) DO NOTHING;
-    """
-    cursor.execute(query, (name, phone))
+def call_insert_or_update(cursor, name, phone):
+    cursor.execute("CALL insert_or_update_user(%s, %s)", (name, phone))
+
+
+def call_insert_many(cursor, names, phones):
+    cursor.execute("SELECT * FROM insert_many_users(%s, %s)", (names, phones))
+    invalids = cursor.fetchall()
+    if invalids:
+        print("[INVALID ENTRIES]")
+        for name, phone in invalids:
+            print(f"{name}: {phone}")
+    else:
+        print("[ALL ENTRIES VALID]")
+
+
+def call_search_pattern(cursor, pattern):
+    cursor.execute("SELECT * FROM search_phonebook(%s)", (pattern,))
+    results = cursor.fetchall()
+    print("[PATTERN MATCHES]")
+    for row in results:
+        print(row)
+
+
+def call_paginated(cursor, limit, offset):
+    cursor.execute("SELECT * FROM get_phonebook_paginated(%s, %s)", (limit, offset))
+    results = cursor.fetchall()
+    print("[PAGINATED RESULTS]")
+    for row in results:
+        print(row)
+
+
+def call_delete_user(cursor, input_value):
+    cursor.execute("CALL delete_user(%s)", (input_value,))
+    print(f"[DELETED]: {input_value}")
 
 
 def getTable(cursor):
     cursor.execute("SELECT * FROM phonebook2")
     rows = cursor.fetchall()
+    print("\n[CURRENT PHONEBOOK ENTRIES]")
     for row in rows:
         print(row)
 
 
-def updateData(cursor, where, towhat):
-    if where.isnumeric():
-        query = "UPDATE phonebook2 SET name = %s WHERE phone = %s"
-    else:
-        query = "UPDATE phonebook2 SET phone = %s WHERE name = %s"
-    cursor.execute(query, (towhat, where))
-
-
-def showData(cursor, select, order):
-    query = f'SELECT "{select}" FROM phonebook2 ORDER BY "{order}"'
-    cursor.execute(query)
-    rows = cursor.fetchall()
-    for row in rows:
-        print(row)
-
-
-def deleteData(cursor, where):
-    if where.isnumeric():
-        query = "DELETE FROM phonebook2 WHERE phone = %s"
-    else:
-        query = "DELETE FROM phonebook2 WHERE name = %s"
-    cursor.execute(query, (where,))
-
-
+# MAIN PROGRAM
 conn = connect()
 if conn is None:
     exit()
@@ -79,42 +80,51 @@ if conn is None:
 cursor = conn.cursor()
 createTable(cursor)
 
-print("Type of query: insert, insertbycsv, update, selectinorder, delete")
+print("Type of query: insert, insertbycsv, pattern, paginate, delete")
 typ = input().strip()
 
 if typ == "insert":
-    n = int(input("Amount of data: "))
+    name = input("Name: ")
+    phone = input("Phone: ")
+    call_insert_or_update(cursor, name, phone)
+
+elif typ == "insertmany":
+    n = int(input("How many users? "))
+    names, phones = [], []
     for _ in range(n):
         name = input("Name: ")
         phone = input("Phone: ")
-        insertData(cursor, name, phone)
+        names.append(name)
+        phones.append(phone)
+    call_insert_many(cursor, names, phones)
 
 elif typ == "insertbycsv":
-    s = input("CSV file name (without .csv): ")
-    dataSet = []
+    csv_name = input("CSV file name (without .csv): ")
+    names, phones = [], []
     try:
-        with open(f"data/{s}.csv", encoding="utf-8") as file:
+        with open(f"data/{csv_name}.csv", encoding="utf-8") as file:
             reader = csv.reader(file)
             next(reader)  # skip header
             for row in reader:
                 name, phone = row[0].split(';')
-                insertData(cursor, name, phone)
+                names.append(name)
+                phones.append(phone)
+        call_insert_many(cursor, names, phones)
     except Exception as e:
         print(f"[ERROR] Failed to load CSV: {e}")
 
-elif typ == "update":
-    where = input("Change in (name or phone): ")
-    towhat = input("To: ")
-    updateData(cursor, where, towhat)
+elif typ == "pattern":
+    pattern = input("Enter search pattern: ")
+    call_search_pattern(cursor, pattern)
 
-elif typ == "selectinorder":
-    select = input("Select column (name or phone): ")
-    order = input("Order by (name or phone): ")
-    showData(cursor, select, order)
+elif typ == "paginate":
+    limit = int(input("Limit: "))
+    offset = int(input("Offset: "))
+    call_paginated(cursor, limit, offset)
 
 elif typ == "delete":
-    where = input("Delete where name or phone = ")
-    deleteData(cursor, where)
+    val = input("Enter name or phone to delete: ")
+    call_delete_user(cursor, val)
 
 conn.commit()
 getTable(cursor)
